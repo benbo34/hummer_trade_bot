@@ -1,0 +1,1 @@
+This is a crypto trading application that is currently in research/development stage. It will include a Redis database with live market data being streamed into it, a bot to perform algorithmic trading, and a django frontend. Possibly integrate ML and other features... stay tuned

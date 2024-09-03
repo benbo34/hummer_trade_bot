@@ -1,0 +1,39 @@
+version: '3.8'
+services:
+  redis:
+    image: redis:latest
+    container_name: redis_db
+    ports:
+      - "6379:6379"
+    networks:
+      - crypto_network
+
+  trading_bot:
+    build:
+      context: .
+      dockerfile: docker/trading_bot/Dockerfile
+    container_name: trading_bot
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - crypto_network
+
+  data_ingestion:
+    build:
+      context: .
+      dockerfile: docker/data_ingestion/Dockerfile
+    container_name: data_ingestion
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - crypto_network
+
+networks:
+  crypto_network:
+    driver: bridge
