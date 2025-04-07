@@ -1,0 +1,207 @@
+{% extends "trading_data/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h1>BTC/USDT Trading Data</h1>
+    
+    <div class="status-indicator">
+        <span id="connection-status">Disconnected</span>
+    </div>
+    
+    <div class="chart-container">
+        <canvas id="priceChart"></canvas>
+    </div>
+    
+    <div class="debug-info">
+        <p>Data Points: <span id="data-points">0</span></p>
+        <p>Last Update: <span id="last-update">Never</span></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block css %}
+<style>
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #0a0a0a;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+}
+
+.status-indicator {
+    margin-bottom: 20px;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.status-indicator.connected {
+    border-color: #00ff00;
+    background-color: rgba(0, 255, 0, 0.1);
+}
+
+.status-indicator.disconnected {
+    border-color: #ff0000;
+    background-color: rgba(255, 0, 0, 0.1);
+}
+
+.chart-container {
+    margin: 20px 0;
+    padding: 20px;
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.debug-info {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+h1 {
+    color: #00ff00;
+    text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+</style>
+{% endblock %}
+
+{% block javascript %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let priceChart;
+let timestamps = [];
+let prices = [];
+let quantities = [];
+let ws;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+
+function initChart() {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: timestamps,
+            datasets: [{
+                label: 'BTC/USDT Price',
+                data: prices,
+                borderColor: '#00ff00',
+                backgroundColor: 'rgba(0, 255, 0, 0.1)',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 0
+            },
+            scales: {
+                x: {
+                    grid: {
+                        color: 'rgba(0, 255, 0, 0.1)'
+                    },
+                    ticks: {
+                        color: '#00ff00'
+                    }
+                },
+                y: {
+                    grid: {
+                        color: 'rgba(0, 255, 0, 0.1)'
+                    },
+                    ticks: {
+                        color: '#00ff00'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#00ff00'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateChart(trade) {
+    const timestamp = new Date(trade.T);
+    const price = parseFloat(trade.p);
+    const quantity = parseFloat(trade.q);
+    
+    timestamps.push(timestamp);
+    prices.push(price);
+    quantities.push(quantity);
+    
+    // Keep only last 100 data points
+    if (timestamps.length > 100) {
+        timestamps.shift();
+        prices.shift();
+        quantities.shift();
+    }
+    
+    priceChart.update();
+    updateDebugInfo();
+}
+
+function updateDebugInfo() {
+    document.getElementById('data-points').textContent = timestamps.length;
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+}
+
+function connectWebSocket() {
+    ws = new WebSocket('ws://' + window.location.host + '/ws/trades/');
+    
+    ws.onopen = function() {
+        console.log('WebSocket connected');
+        document.getElementById('connection-status').textContent = 'Connected';
+        document.getElementById('connection-status').parentElement.classList.add('connected');
+        document.getElementById('connection-status').parentElement.classList.remove('disconnected');
+        reconnectAttempts = 0;
+    };
+    
+    ws.onclose = function() {
+        console.log('WebSocket disconnected');
+        document.getElementById('connection-status').textContent = 'Disconnected';
+        document.getElementById('connection-status').parentElement.classList.add('disconnected');
+        document.getElementById('connection-status').parentElement.classList.remove('connected');
+        
+        if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`);
+            setTimeout(connectWebSocket, 5000);
+        }
+    };
+    
+    ws.onmessage = function(event) {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'trade_update') {
+                updateChart(data.trade);
+            }
+        } catch (e) {
+            console.error('Error processing WebSocket message:', e);
+        }
+    };
+    
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
+}
+
+// Initialize chart and connect WebSocket
+document.addEventListener('DOMContentLoaded', function() {
+    initChart();
+    connectWebSocket();
+});
+</script>
+{% endblock %} 
